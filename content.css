@@ -1,0 +1,178 @@
+.coursera-subtitle-overlay {
+  position: fixed;
+  left: 50%;
+  bottom: 12%;
+  transform: translateX(-50%);
+  z-index: 2147483647;
+  width: 60%;
+  max-width: 72%;
+  min-width: 240px;
+  min-height: 80px;
+  padding: 12px 16px;
+  color: #0f1f2e;
+  background: linear-gradient(135deg, rgba(246, 249, 255, 0.8), rgba(236, 242, 255, 0.72));
+  border: 1px solid rgba(182, 204, 230, 0.7);
+  border-radius: 18px;
+  font-family: "SF Pro Display", "SF Pro Text", "Segoe UI", "Helvetica Neue", sans-serif;
+  font-size: var(--coursera-subtitle-font-size, 16px);
+  line-height: 1.55;
+  text-align: center;
+  user-select: none;
+  cursor: grab;
+  box-shadow: 0 16px 36px rgba(8, 12, 20, 0.18),
+    0 0 18px rgba(178, 214, 255, 0.35);
+  resize: both;
+  overflow: auto;
+  backdrop-filter: blur(18px) saturate(140%);
+}
+
+.coursera-subtitle-overlay.is-dragging {
+  cursor: grabbing;
+}
+
+.coursera-subtitle-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border-radius: 10px;
+  border: 1px solid rgba(176, 212, 255, 0.45);
+  pointer-events: none;
+}
+
+.coursera-subtitle-overlay.is-minimized {
+  width: 44px;
+  height: 44px;
+  max-width: 44px;
+  max-height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 999px;
+  resize: none;
+  overflow: hidden;
+}
+
+.coursera-subtitle-overlay.is-minimized > * {
+  display: none;
+}
+
+.coursera-subtitle-overlay.is-minimized::after {
+  content: "字";
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 14px;
+  color: rgba(28, 52, 74, 0.8);
+  pointer-events: none;
+}
+
+.coursera-subtitle-overlay.is-fullscreen {
+  position: fixed;
+}
+
+.coursera-subtitle-highlight {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(255, 234, 143, 0.55);
+  color: #1b1b1b;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.6);
+}
+
+.coursera-subtitle-hint {
+  font-size: 12px;
+  color: rgba(50, 74, 98, 0.7);
+  margin-top: 6px;
+}
+
+.coursera-subtitle-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.coursera-subtitle-minimal-actions {
+  display: none;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.coursera-subtitle-button {
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(180, 205, 232, 0.8);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.75), rgba(232, 240, 255, 0.7));
+  color: #13263a;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 10px 22px rgba(10, 16, 26, 0.16),
+    inset 0 0 8px rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(6px);
+  transition: transform 0.15s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.coursera-subtitle-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(148, 190, 240, 0.95);
+  box-shadow: 0 12px 24px rgba(10, 16, 26, 0.2),
+    inset 0 0 12px rgba(255, 255, 255, 0.7);
+}
+
+.coursera-subtitle-button:active {
+  transform: translateY(0);
+}
+
+.coursera-subtitle-panel {
+  margin-top: 10px;
+  display: none;
+  text-align: left;
+  color: rgba(34, 60, 84, 0.9);
+}
+
+.coursera-subtitle-panel.is-open {
+  display: block;
+}
+
+.coursera-subtitle-label {
+  display: block;
+  font-size: 12px;
+  color: rgba(34, 60, 84, 0.8);
+  margin-bottom: 4px;
+}
+
+.coursera-subtitle-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.7);
+  color: #0f1f2e;
+  border: 1px solid rgba(180, 205, 232, 0.7);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+
+.coursera-subtitle-range {
+  width: 100%;
+  margin: 6px 0 8px;
+}
+
+.coursera-subtitle-status {
+  margin-top: 6px;
+  font-size: 11px;
+  color: rgba(34, 60, 84, 0.7);
+}
+.coursera-subtitle-overlay.is-subtitle-only .coursera-subtitle-hint,
+.coursera-subtitle-overlay.is-subtitle-only .coursera-subtitle-actions,
+.coursera-subtitle-overlay.is-subtitle-only .coursera-subtitle-status,
+.coursera-subtitle-overlay.is-subtitle-only .coursera-subtitle-panel {
+  display: none !important;
+}
+
+.coursera-subtitle-overlay.is-subtitle-only .coursera-subtitle-minimal-actions {
+  display: flex;
+}

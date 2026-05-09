@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Coursera Subtitle Overlay (MVP)",
+  "version": "0.1.0",
+  "description": "Injects a draggable subtitle overlay on Coursera video pages.",
+  "content_scripts": [
+    {
+      "matches": ["*://*.coursera.org/*"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": ["storage"],
+  "host_permissions": ["https://api.deepseek.com/*"]
+}
