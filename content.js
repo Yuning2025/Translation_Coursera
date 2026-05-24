@@ -28,7 +28,8 @@
     mutationObserver: null,
     fullscreenBound: false,
     dragHandlersBound: false,
-    currentUrl: window.location.href
+    currentUrl: window.location.href,
+    closed: false
   };
 
   function createOverlay() {
@@ -85,7 +86,7 @@
     if (event.button !== 0) return;
     if (!shouldStartDrag(event.target)) return;
     const overlay = document.getElementById(OVERLAY_ID);
-    if (!overlay || overlay.classList.contains("is-minimized")) return;
+    if (!overlay) return;
     STATE.isDragging = true;
     const rect = overlay.getBoundingClientRect();
     STATE.dragOffsetX = event.clientX - rect.left;
@@ -188,6 +189,7 @@
   }
 
   function closeOverlay() {
+    STATE.closed = true;
     const overlay = document.getElementById(OVERLAY_ID);
     if (overlay) {
       overlay.remove();
@@ -196,6 +198,28 @@
       window.cancelAnimationFrame(STATE.rafId);
       STATE.rafId = null;
     }
+    if (STATE.mutationObserver) {
+      STATE.mutationObserver.disconnect();
+      STATE.mutationObserver = null;
+    }
+    if (STATE.resizeObserver) {
+      STATE.resizeObserver.disconnect();
+      STATE.resizeObserver = null;
+    }
+    if (STATE.fullscreenBound) {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      document.removeEventListener("webkitfullscreenchange", handleFullscreenChange);
+      STATE.fullscreenBound = false;
+    }
+    if (STATE.dragHandlersBound) {
+      window.removeEventListener("mousemove", onDragMove);
+      window.removeEventListener("mouseup", onDragEnd);
+      STATE.dragHandlersBound = false;
+    }
+    STATE.video = null;
+    STATE.subtitles = [];
+    STATE.englishCues = [];
+    STATE.hasTranslated = false;
   }
 
   function hydrateOverlay(overlay) {
@@ -446,6 +470,94 @@
     return { lines: parsed, parsedCount };
   }
 
+  function parseVttTimestamp(ts) {
+    const parts = ts.trim().split(":");
+    let hours = 0, minutes = 0;
+    let secsMillis;
+    if (parts.length === 3) {
+      hours = parseInt(parts[0], 10) || 0;
+      minutes = parseInt(parts[1], 10) || 0;
+      secsMillis = parts[2];
+    } else if (parts.length === 2) {
+      minutes = parseInt(parts[0], 10) || 0;
+      secsMillis = parts[1];
+    } else {
+      secsMillis = parts[0];
+    }
+    const [secStr, millisStr] = secsMillis.split(/[.,]/);
+    const seconds = parseInt(secStr, 10) || 0;
+    const millis = parseInt((millisStr || "0").padEnd(3, "0").slice(0, 3), 10) || 0;
+    return hours * 3600 + minutes * 60 + seconds + millis / 1000;
+  }
+
+  function parseVttContent(vttText) {
+    const cues = [];
+    const blocks = vttText.split(/\n\s*\n/);
+    const timeLineRegex = /^\s*((?:\d{2}:)?\d{2}:\d{2}[.,]\d{3})\s*-->\s*((?:\d{2}:)?\d{2}:\d{2}[.,]\d{3})\s*$/;
+
+    for (const block of blocks) {
+      const rawLines = block.split(/\r?\n/);
+      const lines = [];
+      for (const line of rawLines) {
+        const trimmed = line.trim();
+        if (trimmed) lines.push(trimmed);
+      }
+      if (lines.length < 2) continue;
+      if (/^WEBVTT/i.test(lines[0])) continue;
+      if (/^NOTE\b/i.test(lines[0]) || /^STYLE\b/i.test(lines[0])) continue;
+
+      let timeIndex = 0;
+      if (!timeLineRegex.test(lines[0]) && lines.length > 1 && timeLineRegex.test(lines[1])) {
+        timeIndex = 1;
+      }
+      if (timeIndex >= lines.length - 1) continue;
+      const timeMatch = lines[timeIndex].match(timeLineRegex);
+      if (!timeMatch) continue;
+
+      const start = parseVttTimestamp(timeMatch[1]);
+      const end = parseVttTimestamp(timeMatch[2]);
+      const textLines = lines.slice(timeIndex + 1);
+      const text = normalizeCueText(textLines.join(" ").replace(/<[^>]+>/g, ""));
+      if (text) {
+        cues.push({ start, end, text });
+      }
+    }
+    return cues;
+  }
+
+  async function fetchEnglishCuesFromVtt() {
+    const trackElements = document.querySelectorAll("track");
+    const candidates = [];
+
+    for (const track of trackElements) {
+      const lang = (track.getAttribute("srclang") || "").toLowerCase();
+      const label = (track.getAttribute("label") || "").toLowerCase();
+      const kind = (track.getAttribute("kind") || "").toLowerCase();
+      const src = track.getAttribute("src");
+
+      if (!src) continue;
+      if (kind === "metadata" || kind === "chapters") continue;
+
+      const isEnglish = lang.startsWith("en") || label.includes("english") || label.includes("英文");
+      candidates.push({ src, isEnglish, element: track });
+    }
+
+    candidates.sort((a, b) => (b.isEnglish ? 1 : 0) - (a.isEnglish ? 1 : 0));
+
+    for (const candidate of candidates) {
+      try {
+        const response = await fetch(candidate.src);
+        if (!response.ok) continue;
+        const vttText = await response.text();
+        const cues = parseVttContent(vttText);
+        if (cues.length > 0) return cues;
+      } catch (_e) {
+        continue;
+      }
+    }
+    return null;
+  }
+
   function collectEnglishCues() {
     if (!STATE.video) return [];
     const tracks = Array.from(STATE.video.textTracks || []);
@@ -462,29 +574,38 @@
       .filter((cue) => cue.text);
   }
 
-  function attachTrackWatcher() {
+  async function attachTrackWatcher() {
     if (!STATE.video) return;
-    const tracks = Array.from(STATE.video.textTracks || []);
-    tracks.forEach((track) => {
-      if (track.mode === "disabled") track.mode = "hidden";
-      if (track.__courseraOverlayHooked) return;
-      track.__courseraOverlayHooked = true;
-      track.addEventListener("cuechange", () => {
-        const freshCues = collectEnglishCues();
-        if (freshCues.length > STATE.englishCues.length) {
-          STATE.englishCues = freshCues;
-          if (!STATE.hasTranslated) {
-            setStatus(`检测到 ${STATE.englishCues.length} 条英文字幕，请点击"开始翻译"`);
-          }
-        }
-      });
-    });
 
-    const freshCues = collectEnglishCues();
-    if (freshCues.length > STATE.englishCues.length) {
-      STATE.englishCues = freshCues;
+    const vttCues = await fetchEnglishCuesFromVtt();
+    if (vttCues && vttCues.length > 0) {
+      STATE.englishCues = vttCues;
       if (!STATE.hasTranslated) {
-        setStatus(`检测到 ${STATE.englishCues.length} 条英文字幕，请点击"开始翻译"`);
+        setStatus(`检测到 ${STATE.englishCues.length} 条英文字幕（VTT），请点击"开始翻译"`);
+      }
+    } else {
+      const tracks = Array.from(STATE.video.textTracks || []);
+      tracks.forEach((track) => {
+        if (track.mode === "disabled") track.mode = "hidden";
+        if (track.__courseraOverlayHooked) return;
+        track.__courseraOverlayHooked = true;
+        track.addEventListener("cuechange", () => {
+          const freshCues = collectEnglishCues();
+          if (freshCues.length > STATE.englishCues.length) {
+            STATE.englishCues = freshCues;
+            if (!STATE.hasTranslated) {
+              setStatus(`检测到 ${STATE.englishCues.length} 条英文字幕，请点击"开始翻译"`);
+            }
+          }
+        });
+      });
+
+      const freshCues = collectEnglishCues();
+      if (freshCues.length > STATE.englishCues.length) {
+        STATE.englishCues = freshCues;
+        if (!STATE.hasTranslated) {
+          setStatus(`检测到 ${STATE.englishCues.length} 条英文字幕，请点击"开始翻译"`);
+        }
       }
     }
   }
@@ -639,6 +760,10 @@
   }
 
   function tick() {
+    if (STATE.closed) {
+      STATE.rafId = null;
+      return;
+    }
     const overlay = ensureOverlay();
     if (!overlay) {
       STATE.rafId = window.requestAnimationFrame(tick);
